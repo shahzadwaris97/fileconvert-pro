@@ -55,9 +55,15 @@ export default async function handler(req, res) {
     const rawBody = await readRawBody(req);
     const signature = req.headers["x-sfpy-signature"];
 
-    if (!verifySignature(webhookSecret, rawBody, signature)) {
-      return res.status(401).send("Invalid signature");
-    }
+if (!verifySignature(webhookSecret, rawBody, signature)) {
+  console.warn("Safepay webhook: signature verification failed", {
+    signaturePresent: typeof signature === "string",
+    signatureLength:
+      typeof signature === "string" ? signature.length : 0,
+  });
+
+  return res.status(401).send("Invalid signature");
+}
 
     let event;
 
