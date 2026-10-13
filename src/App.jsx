@@ -1,5 +1,6 @@
 import html2canvas from "html2canvas";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PDFDocument, degrees, rgb, StandardFonts } from "pdf-lib";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -8,6 +9,8 @@ import mammoth from "mammoth";
 import html2pdf from "html2pdf.js";
 import JSZip from "jszip";
 import * as pdfjsLib from "pdfjs-dist";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+import { createWorker } from "tesseract.js";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "./App.css";
 
@@ -34,24 +37,24 @@ const tools = [
 const categories = ["All Tools", "Workflows", "Organize PDF", "Optimize PDF", "Convert PDF", "Edit PDF", "PDF Security", "PDF Intelligence"];
 
 const roadmapTools = [
-  { id: "pdf-word", name: "PDF to Word", desc: "Convert PDF pages into an editable Word document.", icon: "W", accept: ".pdf", category: "Convert PDF", comingSoon: true },
-  { id: "pdf-excel", name: "PDF to Excel", desc: "Extract tables from PDF files into spreadsheets.", icon: "X", accept: ".pdf", category: "Convert PDF", comingSoon: true },
-  { id: "pdf-powerpoint", name: "PDF to PowerPoint", desc: "Create editable presentation slides from PDFs.", icon: "P", accept: ".pdf", category: "Convert PDF", comingSoon: true },
-  { id: "powerpoint-pdf", name: "PowerPoint to PDF", desc: "Convert PPT and PPTX presentations into PDF.", icon: "P", accept: ".ppt,.pptx", category: "Convert PDF", comingSoon: true },
-  { id: "html-pdf", name: "HTML to PDF", desc: "Create PDFs from web pages or HTML documents.", icon: "⌘", accept: ".html,.htm", category: "Convert PDF", comingSoon: true },
-  { id: "edit-pdf", name: "Edit PDF", desc: "Add and edit text, images and shapes on PDF pages.", icon: "✎", accept: ".pdf", category: "Edit PDF", comingSoon: true },
-  { id: "crop-pdf", name: "Crop PDF", desc: "Crop page margins and content areas.", icon: "□", accept: ".pdf", category: "Edit PDF", comingSoon: true },
-  { id: "sign-pdf", name: "Sign PDF", desc: "Add a signature to your PDF document.", icon: "✍", accept: ".pdf", category: "PDF Security", comingSoon: true },
-  { id: "protect-pdf", name: "Protect PDF", desc: "Encrypt a PDF with a password.", icon: "🔒", accept: ".pdf", category: "PDF Security", comingSoon: true },
-  { id: "unlock-pdf", name: "Unlock PDF", desc: "Remove PDF restrictions when you have authorization.", icon: "🔓", accept: ".pdf", category: "PDF Security", comingSoon: true },
-  { id: "redact-pdf", name: "Redact PDF", desc: "Permanently remove sensitive information from a PDF.", icon: "▰", accept: ".pdf", category: "PDF Security", comingSoon: true },
-  { id: "repair-pdf", name: "Repair PDF", desc: "Attempt recovery of damaged PDF documents.", icon: "🛠", accept: ".pdf", category: "Optimize PDF", comingSoon: true },
-  { id: "pdfa", name: "PDF to PDF/A", desc: "Prepare a PDF for long-term archival workflows.", icon: "A", accept: ".pdf", category: "Optimize PDF", comingSoon: true },
-  { id: "ocr-pdf", name: "OCR PDF", desc: "Make scanned documents searchable with OCR.", icon: "Aa", accept: ".pdf", category: "PDF Intelligence", comingSoon: true },
-  { id: "summarize-pdf", name: "AI Summarizer", desc: "Summarize document text into key points.", icon: "✦", accept: ".pdf", category: "PDF Intelligence", comingSoon: true },
-  { id: "translate-pdf", name: "Translate PDF", desc: "Translate extracted document text into another language.", icon: "文", accept: ".pdf", category: "PDF Intelligence", comingSoon: true },
+  { id: "pdf-word", name: "PDF to Word", desc: "Convert PDF pages into an editable Word document.", icon: "W", accept: ".pdf", category: "Convert PDF", comingSoon: false },
+  { id: "pdf-excel", name: "PDF to Excel", desc: "Extract tables from PDF files into spreadsheets.", icon: "X", accept: ".pdf", category: "Convert PDF", comingSoon: false },
+  { id: "pdf-powerpoint", name: "PDF to PowerPoint", desc: "Create editable presentation slides from PDFs.", icon: "P", accept: ".pdf", category: "Convert PDF", comingSoon: false},
+  { id: "powerpoint-pdf", name: "PowerPoint to PDF", desc: "Convert PPT and PPTX presentations into PDF.", icon: "P", accept: ".ppt,.pptx", category: "Convert PDF", comingSoon: false },
+  { id: "html-pdf", name: "HTML to PDF", desc: "Create PDFs from web pages or HTML documents.", icon: "⌘", accept: ".html,.htm", category: "Convert PDF", comingSoon: false },
+  { id: "edit-pdf", name: "Edit PDF", desc: "Add and edit text, images and shapes on PDF pages.", icon: "✎", accept: ".pdf", category: "Edit PDF", comingSoon: false },
+  { id: "crop-pdf", name: "Crop PDF", desc: "Crop page margins and content areas.", icon: "□", accept: ".pdf", category: "Edit PDF", comingSoon: false},
+  { id: "sign-pdf", name: "Sign PDF", desc: "Add a signature to your PDF document.", icon: "✍", accept: ".pdf", category: "PDF Security", comingSoon: false },
+  { id: "protect-pdf", name: "Protect PDF", desc: "Encrypt a PDF with a password.", icon: "🔒", accept: ".pdf", category: "PDF Security", comingSoon: false },
+  { id: "unlock-pdf", name: "Unlock PDF", desc: "Remove PDF restrictions when you have authorization.", icon: "🔓", accept: ".pdf", category: "PDF Security", comingSoon: false },
+  { id: "redact-pdf", name: "Redact PDF", desc: "Permanently remove sensitive information from a PDF.", icon: "▰", accept: ".pdf", category: "PDF Security", comingSoon: false },
+  { id: "repair-pdf", name: "Repair PDF", desc: "Attempt recovery of damaged PDF documents.", icon: "🛠", accept: ".pdf", category: "Optimize PDF", comingSoon: false},
+  { id: "pdfa", name: "PDF to PDF/A", desc: "Prepare a PDF for long-term archival workflows.", icon: "A", accept: ".pdf", category: "Optimize PDF", comingSoon: false },
+  { id: "ocr-pdf", name: "OCR PDF", desc: "Make scanned documents searchable with OCR.", icon: "Aa", accept: ".pdf", category: "PDF Intelligence", comingSoon: false},
+  { id: "summarize-pdf", name: "AI Summarizer", desc: "Summarize document text into key points.", icon: "✦", accept: ".pdf", category: "PDF Intelligence", comingSoon: false },
+  { id: "translate-pdf", name: "Translate PDF", desc: "Translate extracted document text into another language.", icon: "文", accept: ".pdf", category: "PDF Intelligence", comingSoon: false },
   { id: "compare-pdf", name: "Compare PDF", desc: "Compare two PDF files to identify differences.", icon: "⇄", accept: ".pdf", category: "PDF Intelligence", comingSoon: true },
-  { id: "markdown-pdf", name: "PDF to Markdown", desc: "Extract document content into Markdown format.", icon: "M↓", accept: ".pdf", category: "PDF Intelligence", comingSoon: true },
+  { id: "markdown-pdf", name: "PDF to Markdown", desc: "Extract document content into Markdown format.", icon: "M↓", accept: ".pdf", category: "PDF Intelligence", comingSoon: false },
 ];
 
 const formatBytes = (bytes) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -105,6 +108,8 @@ async function renderPdfPage(page, scale = 1.5) {
 }
 
 export default function App() {
+  const location = useLocation();
+const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState("All Tools");
   const [activeTool, setActiveTool] = useState(null);
   const [files, setFiles] = useState([]);
@@ -143,18 +148,190 @@ export default function App() {
     setSplitResults([]); setSplitZipBlob(null);
     if (fileInput.current) fileInput.current.value = "";
   }
-  function chooseTool(tool) {
-    if (tool.comingSoon) {
-      setActiveTool(null); setFiles([]); setError("");
-      setStatus(`${tool.name} is listed in the roadmap but is not enabled yet. We will activate it after its conversion workflow is implemented and tested.`);
-      return;
+  const toolSlugs = {
+  merge: "merge-pdf",
+  split: "split-pdf",
+  extract: "extract-pdf-pages",
+  delete: "delete-pdf-pages",
+  organize: "organize-pdf",
+  rotate: "rotate-pdf",
+  compress: "compress-pdf",
+  watermark: "add-watermark",
+  numbers: "add-page-numbers",
+  "images-pdf": "image-to-pdf",
+  "pdf-images": "pdf-to-jpg",
+  "word-pdf": "word-to-pdf",
+  "excel-pdf": "excel-to-pdf",
+  "pdf-text": "pdf-to-text",
+  "text-pdf": "text-to-pdf",
+};
+
+const toolSeo = {
+  merge: {
+    title: "Merge PDF Online Free | Umar Convert",
+    description: "Merge multiple PDF files into one document online with Umar Convert.",
+  },
+  split: {
+    title: "Split PDF Online Free | Umar Convert",
+    description: "Split PDF pages into separate files quickly with Umar Convert.",
+  },
+  extract: {
+    title: "Extract PDF Pages Online | Umar Convert",
+    description: "Extract selected pages from a PDF document using Umar Convert.",
+  },
+  delete: {
+    title: "Delete PDF Pages Online | Umar Convert",
+    description: "Remove unwanted pages from your PDF file with Umar Convert.",
+  },
+  organize: {
+    title: "Organize PDF Pages Online | Umar Convert",
+    description: "Arrange and organize PDF pages with Umar Convert's online tools.",
+  },
+  rotate: {
+    title: "Rotate PDF Online Free | Umar Convert",
+    description: "Rotate PDF pages to the correct orientation with Umar Convert.",
+  },
+  compress: {
+    title: "Compress PDF Online Free | Umar Convert",
+    description: "Reduce PDF file size online with Umar Convert's PDF compressor.",
+  },
+  watermark: {
+    title: "Add Watermark to PDF Online | Umar Convert",
+    description: "Add a text watermark to your PDF documents with Umar Convert.",
+  },
+  numbers: {
+    title: "Add Page Numbers to PDF | Umar Convert",
+    description: "Add page numbers to PDF documents online using Umar Convert.",
+  },
+  "images-pdf": {
+    title: "JPG to PDF Converter Online | Umar Convert",
+    description: "Convert JPG, PNG and other supported images into PDF files.",
+  },
+  "pdf-images": {
+    title: "PDF to JPG Converter Online | Umar Convert",
+    description: "Convert PDF pages into JPG images using Umar Convert.",
+  },
+  "word-pdf": {
+    title: "Word to PDF Converter Online | Umar Convert",
+    description: "Convert Word documents to PDF online with Umar Convert.",
+  },
+  "excel-pdf": {
+    title: "Excel to PDF Converter Online | Umar Convert",
+    description: "Convert Excel spreadsheets to PDF using Umar Convert.",
+  },
+  "pdf-text": {
+    title: "PDF to Text Converter Online | Umar Convert",
+    description: "Extract selectable text from PDF documents with Umar Convert.",
+  },
+  "text-pdf": {
+    title: "Text to PDF Converter Online | Umar Convert",
+    description: "Convert plain text files into PDF documents online.",
+  },
+};
+
+useEffect(() => {
+  const slug = location.pathname.replace(/^\/+|\/+$/g, "");
+
+  const matchedEntry = Object.entries(toolSlugs).find(
+    ([, routeSlug]) => routeSlug === slug
+  );
+
+  if (!matchedEntry) {
+    if (slug === "") {
+      document.title = "Umar Convert | Free Online PDF Tools";
+      setActiveTool(null);
+
+      let description = document.querySelector('meta[name="description"]');
+      if (!description) {
+        description = document.createElement("meta");
+        description.name = "description";
+        document.head.appendChild(description);
+      }
+      description.content =
+        "Umar Convert offers simple online PDF tools to merge, split, compress and convert files.";
+
     }
-    setActiveTool(tool); setFiles([]); setPageRanges("1-2"); setPageOrder("1,2,3");
-    setWatermarkText("YOURLOVEPDF"); setRotation("90"); setCompressionLevel("recommended");
-    setStatus(""); setError(""); setSplitResults([]); setSplitZipBlob(null);
-    if (fileInput.current) fileInput.current.value = "";
-    document.getElementById("tools")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
   }
+
+  const [toolId] = matchedEntry;
+  const selectedTool = tools.find((tool) => tool.id === toolId);
+
+  if (selectedTool) {
+    setActiveTool(selectedTool);
+  }
+
+  const seo = toolSeo[toolId];
+  const toolName = selectedTool?.name || "PDF Tools";
+
+  document.title = seo?.title || `${toolName} Online | Umar Convert`;
+
+  let description = document.querySelector('meta[name="description"]');
+  if (!description) {
+    description = document.createElement("meta");
+    description.name = "description";
+    document.head.appendChild(description);
+  }
+
+  description.content =
+    seo?.description ||
+    `Use Umar Convert to ${toolName.toLowerCase()} online with our simple PDF tools.`;
+}, [location.pathname]);
+
+function chooseTool(tool) {
+  if (tool.comingSoon) {
+    setActiveTool(null);
+    setFiles([]);
+    setError("");
+    setStatus(`${tool.name} is listed in the roadmap but is not enabled yet.`);
+    return;
+  }
+
+  const slugs = {
+    merge: "merge-pdf",
+    split: "split-pdf",
+    extract: "extract-pdf-pages",
+    delete: "delete-pdf-pages",
+    organize: "organize-pdf",
+    rotate: "rotate-pdf",
+    compress: "compress-pdf",
+    watermark: "add-watermark",
+    numbers: "add-page-numbers",
+    "images-pdf": "image-to-pdf",
+    "pdf-images": "pdf-to-jpg",
+    "word-pdf": "word-to-pdf",
+    "excel-pdf": "excel-to-pdf",
+    "pdf-text": "pdf-to-text",
+    "text-pdf": "text-to-pdf",
+  };
+
+  setActiveTool(tool);
+  setFiles([]);
+  setPageRanges("1-2");
+  setPageOrder("1,2,3");
+  setWatermarkText("YOURLOVEPDF");
+  setRotation("90");
+  setCompressionLevel("recommended");
+  setStatus("");
+  setError("");
+  setSplitResults([]);
+  setSplitZipBlob(null);
+
+  if (fileInput.current) {
+    fileInput.current.value = "";
+  }
+
+  const slug = slugs[tool.id];
+
+  if (slug) {
+    navigate(`/${slug}`);
+  }
+
+  document.getElementById("tools")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
   function handleFiles(list) {
     const chosen = Array.from(list || []);
     if (!activeTool) return;
@@ -276,9 +453,9 @@ export default function App() {
       canvas.width = 0; canvas.height = 0;
     }
     downloadBlob(await zip.generateAsync({ type: "blob" }), `${baseName(files[0].name)}-jpg.zip`);
-  } 
- 
-  
+  }
+
+
 async function wordToPdf() {
   const file = files[0];
 
@@ -527,6 +704,8 @@ async function wordToPdf() {
   }
 }
 
+
+
 async function excelToPdf() {
   const file = files[0];
 
@@ -534,159 +713,403 @@ async function excelToPdf() {
     throw new Error("Please select an Excel file first.");
   }
 
-  const workbook = XLSX.read(
-    await file.arrayBuffer(),
-    { type: "array", cellDates: true }
+  setStatus("Converting Excel file while preserving its layout...");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(
+    "http://localhost:3001/api/excel-to-pdf",
+    {
+      method: "POST",
+      body: formData
+    }
   );
 
-  const pdf = new jsPDF({
-    orientation: "landscape",
-    unit: "mm",
-    format: "a4",
-    compress: true
-  });
+  if (!response.ok) {
+    let errorMessage = "Excel to PDF conversion failed.";
 
-  let hasContent = false;
-
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-
-    if (!sheet || !sheet["!ref"]) continue;
-
-    setStatus(`Preparing sheet: ${sheetName}...`);
-
-    const range = XLSX.utils.decode_range(sheet["!ref"]);
-    const rows = [];
-
-    for (let r = range.s.r; r <= range.e.r; r++) {
-      const row = [];
-
-      for (let c = range.s.c; c <= range.e.c; c++) {
-        const address = XLSX.utils.encode_cell({ r, c });
-        const cell = sheet[address];
-
-        let value = "";
-
-        if (cell) {
-          if (cell.w !== undefined) {
-            value = cell.w;
-          } else if (cell.v !== undefined) {
-            value = String(cell.v);
-          }
-        }
-
-        row.push(String(value ?? ""));
-      }
-
-      rows.push(row);
+    try {
+      const result = await response.json();
+      if (result.error) errorMessage = result.error;
+    } catch {
+      // Keep the default error message.
     }
 
-    if (!rows.some((row) => row.some((cell) => cell.trim()))) {
-      continue;
-    }
-
-    if (hasContent) {
-      pdf.addPage("a4", "landscape");
-    }
-
-    hasContent = true;
-
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(13);
-    pdf.setTextColor(30, 70, 50);
-    pdf.text(String(sheetName).slice(0, 80), 9, 10);
-
-    const usableWidth =
-      pdf.internal.pageSize.getWidth() - 18;
-
-    const columnCount = Math.max(
-      1,
-      ...rows.map((row) => row.length)
-    );
-
-    // Use Excel column width information when available.
-    const excelColumns = sheet["!cols"] || [];
-
-    const weights = Array.from(
-      { length: columnCount },
-      (_, index) => {
-        const excelWidth = excelColumns[index]?.wch;
-
-        return Math.max(
-          1,
-          Math.min(Number(excelWidth) || 10, 35)
-        );
-      }
-    );
-
-    const totalWeight = weights.reduce(
-      (sum, weight) => sum + weight,
-      0
-    );
-
-    const columnStyles = {};
-
-    weights.forEach((weight, index) => {
-      columnStyles[index] = {
-        cellWidth: (weight / totalWeight) * usableWidth
-      };
-    });
-
-    const normalized = rows.map((row) =>
-      Array.from(
-        { length: columnCount },
-        (_, index) => String(row[index] ?? "")
-      )
-    );
-
-    autoTable(pdf, {
-      head: [normalized[0]],
-      body: normalized.slice(1),
-      startY: 15,
-      margin: { top: 15, right: 9, bottom: 10, left: 9 },
-      tableWidth: "auto",
-      columnStyles,
-      theme: "grid",
-      showHead: "everyPage",
-      styles: {
-        font: "helvetica",
-        fontSize: 7,
-        cellPadding: 2,
-        overflow: "linebreak",
-        lineColor: [160, 170, 165],
-        lineWidth: 0.2,
-        textColor: [35, 35, 35],
-        fillColor: [255, 255, 255],
-        valign: "middle"
-      },
-      headStyles: {
-        fillColor: [220, 240, 226],
-        textColor: [20, 65, 40],
-        fontStyle: "bold",
-        lineColor: [100, 135, 110],
-        lineWidth: 0.25
-      },
-      alternateRowStyles: {
-        fillColor: [247, 250, 247]
-      },
-      horizontalPageBreak: true,
-      horizontalPageBreakRepeat: 0
-    });
+    throw new Error(errorMessage);
   }
 
-  if (!hasContent) {
-    throw new Error("No spreadsheet data found.");
+  const pdfBlob = await response.blob();
+
+  if (pdfBlob.size === 0) {
+    throw new Error("The converted PDF is empty.");
+  }
+
+  downloadBlob(pdfBlob, `${baseName(file.name)}.pdf`);
+
+  setStatus("Excel converted to PDF successfully!");
+}
+
+
+async function pdfToText() {
+  const file = files[0];
+  if (!file) throw new Error("Please select a PDF file.");
+
+  const task = pdfjsLib.getDocument({
+    data: new Uint8Array(await file.arrayBuffer()),
+  });
+  const doc = await task.promise;
+  const pages = [];
+
+  for (let n = 1; n <= doc.numPages; n++) {
+    setStatus(`Extracting text from page ${n} of ${doc.numPages}...`);
+    const page = await doc.getPage(n);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ");
+    pages.push(`--- Page ${n} ---\n${text}`);
+  }
+
+  const output = pages.join("\n\n");
+  if (!output.trim()) {
+    throw new Error("No selectable text found. This PDF may need OCR.");
   }
 
   downloadBlob(
-    pdf.output("blob"),
-    `${baseName(file.name)}.pdf`
-  );
-
-  setStatus(
-    "Excel conversion complete. Check the PDF layout and gridlines."
+    new Blob([output], { type: "text/plain;charset=utf-8" }),
+    `${baseName(file.name)}.txt`
   );
 }
+
+async function textToPdf() {
+  const file = files[0];
+  if (!file) throw new Error("Please select a TXT file.");
+
+  const text = await file.text();
+  if (!text.trim()) throw new Error("The text file is empty.");
+
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const margin = 15;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const lines = pdf.splitTextToSize(text, pageWidth - margin * 2);
+  const lineHeight = 6;
+  let y = margin;
+
+  for (const line of lines) {
+    if (y + lineHeight > pageHeight - margin) {
+      pdf.addPage();
+      y = margin;
+    }
+    pdf.text(line, margin, y);
+    y += lineHeight;
+  }
+
+  downloadBlob(pdf.output("blob"), `${baseName(file.name)}.pdf`);
+}
+
+
+async function compressPdf() {
+  const file = files[0];
+
+  if (!file) {
+    throw new Error("Please select a PDF file.");
+  }
+
+  const qualitySettings = {
+    recommended: { scale: 1.5, jpeg: 0.72 },
+    strong: { scale: 1.2, jpeg: 0.55 },
+    extreme: { scale: 1.0, jpeg: 0.40 },
+  };
+
+  const quality =
+    qualitySettings[compressionLevel] ||
+    qualitySettings.recommended;
+
+let pdfJsDocument;
+let pdfJsTask;
+
+  try {
+    setStatus("Opening PDF...");
+
+   pdfJsTask = pdfjsLib.getDocument({
+  data: new Uint8Array(await file.arrayBuffer()),
+});
+
+pdfJsDocument = await pdfJsTask.promise;
+
+    const output = new jsPDF({
+      unit: "pt",
+      format: "a4",
+      compress: true,
+    });
+
+    for (let n = 1; n <= pdfJsDocument.numPages; n++) {
+      setStatus(
+        `Compressing page ${n} of ${pdfJsDocument.numPages}...`
+      );
+
+      const page = await pdfJsDocument.getPage(n);
+      const originalViewport = page.getViewport({ scale: 1 });
+
+      const renderViewport = page.getViewport({
+        scale: quality.scale,
+      });
+
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        throw new Error("Could not create a page canvas.");
+      }
+
+      canvas.width = Math.ceil(renderViewport.width);
+      canvas.height = Math.ceil(renderViewport.height);
+
+      try {
+        await page.render({
+          canvasContext: context,
+          viewport: renderViewport,
+        }).promise;
+
+        const imageBlob = await new Promise((resolve, reject) => {
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("Could not compress a PDF page."));
+            },
+            "image/jpeg",
+            quality.jpeg
+          );
+        });
+
+        const imageUrl = URL.createObjectURL(imageBlob);
+
+        try {
+          const pageWidth = originalViewport.width;
+          const pageHeight = originalViewport.height;
+
+          if (n > 1) {
+            output.addPage([pageWidth, pageHeight]);
+          } else {
+            output.internal.pageSize.setWidth(pageWidth);
+            output.internal.pageSize.setHeight(pageHeight);
+          }
+
+          output.addImage(
+            imageUrl,
+            "JPEG",
+            0,
+            0,
+            pageWidth,
+            pageHeight,
+            undefined,
+            "FAST"
+          );
+        } finally {
+          URL.revokeObjectURL(imageUrl);
+        }
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    }
+
+    const compressedBlob = output.output("blob");
+
+    if (compressedBlob.size >= file.size) {
+      setStatus(
+        `Compression could not reduce this PDF (${formatBytes(file.size)} original). No larger file was downloaded. Try Strong compression or another PDF.`
+      );
+      return;
+    }
+
+    downloadBlob(
+      compressedBlob,
+      `${baseName(file.name)}-compressed.pdf`
+    );
+
+    const reduction = Math.round(
+      ((file.size - compressedBlob.size) / file.size) * 100
+    );
+
+    setStatus(
+      `Compression complete! ${formatBytes(file.size)} → ${formatBytes(compressedBlob.size)} (${reduction}% smaller). Please review the PDF quality.` );}
+finally {
+  if (pdfJsTask) {
+    await pdfJsTask.destroy();
+  }
+}
+}
+
+async function pdfToWord() {
+  const file = files[0];
+
+  if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
+    throw new Error("Please select a PDF file.");
+  }
+
+  const pdf = await pdfjsLib.getDocument({
+    data: await file.arrayBuffer(),
+  }).promise;
+
+  const paragraphs = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+
+    const pageText = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .trim();
+
+    if (pageNumber > 1) {
+      paragraphs.push(new Paragraph({ children: [], pageBreakBefore: true }));
+    }
+
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: pageText || "[No selectable text on this page]",
+          }),
+        ],
+      })
+    );
+  }
+
+  const documentFile = new Document({
+    sections: [{ children: paragraphs }],
+  });
+
+  const blob = await Packer.toBlob(documentFile);
+  downloadBlob(
+    blob,
+    `${file.name.replace(/\.pdf$/i, "")}.docx`
+  );
+
+  setStatus("Done! Your editable Word document is ready.");
+}
+
+
+async function pdfToMarkdown() {
+  const file = files[0];
+
+  if (!file || !/\.pdf$/i.test(file.name)) {
+    throw new Error("Please select a valid PDF file.");
+  }
+
+  let pdf;
+  let ocrWorker;
+  let extractedPages = 0;
+  let ocrPages = 0;
+  const markdown = [`# ${baseName(file.name)}`, ""];
+
+  try {
+    setStatus("Opening PDF...");
+
+    pdf = await pdfjsLib.getDocument({
+      data: new Uint8Array(await file.arrayBuffer()),
+    }).promise;
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      setStatus(`Reading page ${pageNumber} of ${pdf.numPages}...`);
+
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+
+      let pageText = content.items
+        .map((item) => ("str" in item ? item.str.trim() : ""))
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      // Scanner watermark ko meaningful document text mein count na karein.
+      const meaningfulText = pageText
+        .replace(/\bCamScanner\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (meaningfulText.length < 30) {
+        setStatus(
+          `Scanned page ${pageNumber}/${pdf.numPages}: running OCR...`
+        );
+
+        if (!ocrWorker) {
+          ocrWorker = await createWorker("eng");
+        }
+
+        const { canvas } = await renderPdfPage(page, 2);
+
+        try {
+          const result = await ocrWorker.recognize(canvas);
+          const ocrText = result?.data?.text?.trim() || "";
+
+          if (ocrText) {
+            pageText = ocrText;
+            ocrPages++;
+          } else {
+            pageText = meaningfulText;
+          }
+        } finally {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+      } else {
+        pageText = meaningfulText;
+        extractedPages++;
+      }
+
+      markdown.push(`## Page ${pageNumber}`, "");
+
+      if (pageText.trim()) {
+        markdown.push(pageText.trim(), "");
+      } else {
+        markdown.push(
+          "> No readable text detected on this page.",
+          ""
+        );
+      }
+    }
+
+    const hasReadableText = markdown.some(
+      (line) =>
+        line.trim() &&
+        !line.startsWith("#") &&
+        !line.startsWith(">")
+    );
+
+    if (!hasReadableText) {
+      throw new Error(
+        "No readable text found. The scan may be unclear or OCR could not recognize its text."
+      );
+    }
+
+    const output = new Blob(
+      [markdown.join("\n") + "\n"],
+      { type: "text/markdown;charset=utf-8" }
+    );
+
+    downloadBlob(output, `${baseName(file.name)}.md`);
+
+    setStatus(
+      `Markdown ready! Selectable-text pages: ${extractedPages}. OCR pages: ${ocrPages}. Please review the extracted text.`
+    );
+  } finally {
+    if (ocrWorker) {
+      await ocrWorker.terminate();
+    }
+
+    if (pdf) {
+      await pdf.destroy();
+    }
+  }
+}
+
+
   async function runTool() {
     if (!activeTool) return;
     if (!files.length) { setError("Please choose a file first."); return; }
@@ -708,6 +1131,8 @@ async function excelToPdf() {
         case "excel-pdf": await excelToPdf(); break;
         case "pdf-text": await pdfToText(); break;
         case "text-pdf": await textToPdf(); break;
+        case "pdf-word": await pdfToWord(); break;
+        case "markdown-pdf": await pdfToMarkdown(); break;
         case "compress": await compressPdf(); break;
         default: throw new Error("This tool is not available yet.");
       }

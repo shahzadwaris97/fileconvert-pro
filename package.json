@@ -3,25 +3,34 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
-  },
+
+"scripts": {
+  "dev": "vite",
+  "build": "vite build",
+  "lint": "oxlint",
+  "preview": "vite preview",
+  "server": "node server.js"
+},
+
   "dependencies": {
     "@okathira/ghostpdl-wasm": "^1.1.0",
     "@supabase/supabase-js": "^2.117.3",
+    "cors": "^2.8.6",
+    "docx": "^9.10.0",
+    "express": "^5.3.0",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.2",
     "mammoth": "^1.13.0",
+    "multer": "^2.4.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4",
+    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
