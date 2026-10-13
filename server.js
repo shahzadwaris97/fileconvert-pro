@@ -34,8 +34,10 @@ const upload = multer({
 
 function convertWithLibreOffice(inputPath, outputDir) {
   return new Promise(async (resolve, reject) => {
-    const executable = process.env.LIBREOFFICE_PATH ||
-      "C:\\Program Files\\LibreOffice\\program\\soffice.exe";
+   const executable = process.env.LIBREOFFICE_PATH ||
+  (process.platform === "win32"
+    ? "C:\\Program Files\\LibreOffice\\program\\soffice.exe"
+    : "soffice");
 
     const profileDir = path.join(
       os.tmpdir(),
