@@ -14,7 +14,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "http://localhost:5174"
+    "http://localhost:5174",
+    "https://umerconvert-pro.vercel.app",
+    ...(process.env.FRONTEND_ORIGIN
+      ? process.env.FRONTEND_ORIGIN.split(",").map(origin => origin.trim())
+      : [])
   ]
 }));
 
