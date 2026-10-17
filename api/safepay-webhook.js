@@ -3,23 +3,29 @@ import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false },
 };
 
-function verifySignature(secret, rawBody, signature) {
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function matchesHmac(secret, content, signature) {
   if (
     !secret ||
     typeof signature !== "string" ||
-    !/^[a-fA-F0-9]{64}$/.test(signature)
+    !/^[a-fA-F0-9]{128}$/.test(signature)
   ) {
     return false;
   }
 
   const expected = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody)
+    .createHmac("sha512", secret)
+    .update(content)
     .digest();
 
   const received = Buffer.from(signature, "hex");
@@ -27,14 +33,20 @@ function verifySignature(secret, rawBody, signature) {
   return crypto.timingSafeEqual(expected, received);
 }
 
-async function readRawBody(req) {
-  const chunks = [];
-
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+function verifySignature(secret, rawBody, event, signature) {
+  if (matchesHmac(secret, rawBody, signature)) {
+    return "raw-body";
   }
 
-  return Buffer.concat(chunks);
+  if (event?.data && typeof event.data === "object") {
+    const serializedData = JSON.stringify(event.data);
+
+    if (matchesHmac(secret, serializedData, signature)) {
+      return "data-json";
+    }
+  }
+
+  return "none";
 }
 
 export default async function handler(req, res) {
@@ -45,32 +57,34 @@ export default async function handler(req, res) {
 
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
-  const webhookSecret = process.env.SAFEPAY_WEBHOOK_SECRET;
+  const secret = process.env.SAFEPAY_WEBHOOK_SECRET;
 
-  if (!url || !key || !webhookSecret) {
+  if (!url || !key || !secret) {
     return res.status(500).send("Server configuration missing");
   }
 
   try {
     const rawBody = await readRawBody(req);
-    const signature = req.headers["x-sfpy-signature"];
-
-if (!verifySignature(webhookSecret, rawBody, signature)) {
-  console.warn("Safepay webhook: signature verification failed", {
-    signaturePresent: typeof signature === "string",
-    signatureLength:
-      typeof signature === "string" ? signature.length : 0,
-  });
-
-  return res.status(401).send("Invalid signature");
-}
-
     let event;
 
     try {
       event = JSON.parse(rawBody.toString("utf8"));
     } catch {
       return res.status(400).send("Invalid JSON");
+    }
+
+    const signature = req.headers["x-sfpy-signature"];
+    const verification = verifySignature(
+      secret,
+      rawBody,
+      event,
+      signature
+    );
+
+    console.info("Safepay webhook verification:", verification);
+
+    if (verification === "none") {
+      return res.status(401).send("Invalid signature");
     }
 
     if (
@@ -101,7 +115,9 @@ if (!verifySignature(webhookSecret, rawBody, signature)) {
     }
 
     if (error) {
-      console.error("Could not store webhook event");
+      console.error("Could not store webhook event", {
+        code: error.code,
+      });
       return res.status(500).send("Event storage failed");
     }
 
